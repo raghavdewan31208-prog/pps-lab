@@ -16,3 +16,5 @@ Open the GitHub Pages URL in a modern browser. No local installation is required
 - C++17 compilation via Judge0 CE
 
 Note: This is a static personal practice site. Question data and evaluation logic are shipped to the browser and are not suitable for secure or high-stakes assessment.
+
+<!-- deploy-trigger:2026-11-11-pps-lab-pages -->
