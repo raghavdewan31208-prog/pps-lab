@@ -28,7 +28,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: agastyadaratla-ops/cpp-playground
-          ref: main
+          ref: e59ce34cac27a50a9bac68524dc7784395675c75
           path: _cpp_compiler
 
       - name: Bundle local WebAssembly compiler and licenses
