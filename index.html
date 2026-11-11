@@ -864,7 +864,7 @@ function __runWithLocalClang(module, tests, onCase, timeoutMs=20000) {
       const {id,data}=event.data||{};
       if(id==='case'){
         const test=tests[data.index];
-        const passed=data.status==='success' && __normalise(data.stdout)===__normalise(test.expected);
+        const passed=data.status==='success' && (test.expected===undefined || __normalise(data.stdout)===__normalise(test.expected));
         const row={index:data.index+1,passed,visible:!!test.visible,status:data.status==='success'?(passed?'passed':'wrong_answer'):data.status};
         if(test.visible){row.input=test.input;row.expected=test.expected;row.actual=data.stdout||'';row.stderr=data.stderr||'';}
         results[data.index]=row;
@@ -908,7 +908,7 @@ async function runCurrentCode(submit) {
       tests=(bankQuestion.tests||[]).map(test=>({input:test.input||'',expected:test.expected||'',visible:(q.samples||[]).some(sample=>sample.input===test.input)}));
       if(!tests.length)throw new Error('This question does not have test cases yet.');
     }else{
-      tests=[{input:state.customInput||'',expected:'',visible:true}];
+      tests=[{input:state.customInput||'',visible:true}];
     }
     const data=await __runLocalPps(code,tests,progress=>{
       if(progress?.phase){
