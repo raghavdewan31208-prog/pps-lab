@@ -18,19 +18,43 @@ jobs:
   deploy:
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: \${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
+      - name: Check out PPS Lab
         uses: actions/checkout@v4
+
+      - name: Check out browser C++17 toolchain
+        uses: actions/checkout@v4
+        with:
+          repository: agastyadaratla-ops/cpp-playground
+          ref: main
+          path: _cpp_compiler
+
+      - name: Bundle local WebAssembly compiler and licenses
+        run: |
+          mkdir -p wasm compiler/wasm-clang
+          cp -R _cpp_compiler/wasm/. wasm/
+          cp _cpp_compiler/js/wasm-clang/shared.js compiler/wasm-clang/shared.js
+          cp _cpp_compiler/js/wasm-clang/LICENSE compiler/wasm-clang/LICENSE
+          cp _cpp_compiler/NOTICE COMPILER-NOTICE.txt
+          test -s wasm/clang
+          test -s wasm/lld
+          test -s wasm/memfs
+          test -s wasm/sysroot.tar
+          test -s compiler/wasm-clang/shared.js
+          du -sh wasm
+
       - name: Enable and configure Pages
         uses: actions/configure-pages@v5
         with:
           enablement: true
+
       - name: Upload site
         uses: actions/upload-pages-artifact@v4
         with:
           path: .
+
       - name: Deploy site
         id: deployment
         uses: actions/deploy-pages@v4
