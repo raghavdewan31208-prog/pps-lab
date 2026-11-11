@@ -20,6 +20,7 @@ self.onmessage = async event => {
   const message = event.data || {};
   if (message.id !== 'run-suite') return;
   let currentOutput = '';
+  let skipCommandEcho = false;
   try {
     const module = message.data?.module;
     const tests = message.data?.tests || [];
@@ -27,7 +28,7 @@ self.onmessage = async event => {
     const api = new API({
       readBuffer,
       compileStreaming,
-      hostWrite:chunk => { currentOutput += String(chunk ?? ''); },
+      hostWrite:chunk => { if(skipCommandEcho){skipCommandEcho=false;return;} currentOutput += String(chunk ?? ''); },
       clang:'../wasm/clang',
       lld:'../wasm/lld',
       memfs:'../wasm/memfs',
@@ -36,6 +37,7 @@ self.onmessage = async event => {
     await api.ready;
     for (let i=0;i<tests.length;i++) {
       currentOutput = '';
+      skipCommandEcho = true;
       api.memfs.setStdinStr(String(tests[i].input ?? ''));
       try {
         await api.run(module,'main');
