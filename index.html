@@ -610,9 +610,9 @@ function renderRunOutput(data) {
   return `<div class="console-status"><i class="status-dot ${data.status==='success'?'online':'offline'}"></i>${label} · ${data.timeMs||0} ms</div>${data.stdout?`<div class="section-label">STANDARD OUTPUT</div><pre class="console-pre">${esc(data.stdout)}</pre>`:`<div class="console-empty">Program produced no standard output.</div>`}${data.stderr?`<div class="section-label" style="margin-top:10px">STANDARD ERROR</div><pre class="console-pre">${esc(data.stderr)}</pre>`:''}`;
 }
 function renderTestOutput(data) {
-  if (!data) return \`<div class="console-empty">Submit your code to run every shown and hidden test case. Results will appear here one by one.</div>\`;
+  if (!data) return `<div class="console-empty">Submit your code to run every shown and hidden test case. Results will appear here one by one.</div>`;
   if (data.status === 'service_error') {
-    return \`<div class="console-status"><i class="status-dot offline"></i><strong>Compiler service unavailable</strong></div><pre class="console-pre">\${esc(data.error || 'The compiler service did not return a result. Your answer was not graded.')}</pre>\`;
+    return `<div class="console-status"><i class="status-dot offline"></i><strong>Compiler service unavailable</strong></div><pre class="console-pre">${esc(data.error || 'The compiler service did not return a result. Your answer was not graded.')}</pre>`;
   }
 
   const results = data.testResults || [];
@@ -624,7 +624,7 @@ function renderTestOutput(data) {
   const isRunning = data.status === 'running';
   const isCompileError = data.status === 'compile_error';
   const accepted = Boolean(data.accepted);
-  const headline = isRunning ? \`Checking test cases… \${checked}/\${total}\`
+  const headline = isRunning ? `Checking test cases… ${checked}/${total}`
     : accepted ? 'Accepted · All test cases passed'
     : isCompileError ? 'Compilation Error'
     : data.status === 'time_limit' ? 'Time Limit Exceeded'
@@ -642,33 +642,33 @@ function renderTestOutput(data) {
   };
   const statusClass = result => result.passed ? 'test-pass' : 'test-fail';
 
-  return \`<div style="display:grid;gap:11px">
-    <div class="test-result" style="padding:12px;border-color:\${accepted?'#28634f':isRunning?'#385781':'#68404a'};background:\${accepted?'#102a24':isRunning?'#14243a':'#2a1a22'}">
+  return `<div style="display:grid;gap:11px">
+    <div class="test-result" style="padding:12px;border-color:${accepted?'#28634f':isRunning?'#385781':'#68404a'};background:${accepted?'#102a24':isRunning?'#14243a':'#2a1a22'}">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:9px"><span class="status-dot \${accepted?'online':isRunning?'':'offline'}"></span><strong style="font-size:12px">\${headline}</strong></div>
-        <strong style="font:700 15px var(--mono);color:\${accepted?'var(--green)':isRunning?'var(--blue)':'var(--red)'}">\${passed}/\${total}</strong>
+        <div style="display:flex;align-items:center;gap:9px"><span class="status-dot ${accepted?'online':isRunning?'':'offline'}"></span><strong style="font-size:12px">${headline}</strong></div>
+        <strong style="font:700 15px var(--mono);color:${accepted?'var(--green)':isRunning?'var(--blue)':'var(--red)'}">${passed}/${total}</strong>
       </div>
-      <div style="height:7px;background:#202c40;border-radius:20px;overflow:hidden;margin-top:11px"><div style="height:100%;width:\${pct}%;background:\${accepted?'var(--green)':isRunning?'var(--blue)':'var(--red)'};border-radius:20px;transition:width .2s"></div></div>
+      <div style="height:7px;background:#202c40;border-radius:20px;overflow:hidden;margin-top:11px"><div style="height:100%;width:${pct}%;background:${accepted?'var(--green)':isRunning?'var(--blue)':'var(--red)'};border-radius:20px;transition:width .2s"></div></div>
       <div style="display:flex;gap:13px;flex-wrap:wrap;margin-top:9px;font-size:9px;color:#9aabc2">
-        <span>✓ \${passed} passed</span><span>✕ \${failed} failed</span><span>◷ \${notRun} not run</span><span>\${total} total</span>
-        \${data.executionTimeMs?'<span>CPU '+Math.round(data.executionTimeMs)+' ms</span>':''}
+        <span>✓ ${passed} passed</span><span>✕ ${failed} failed</span><span>◷ ${notRun} not run</span><span>${total} total</span>
+        ${data.executionTimeMs?'<span>CPU '+Math.round(data.executionTimeMs)+' ms</span>':''}
       </div>
-      \${isCompileError && data.compileOutput?\`<div class="sample-label" style="margin-top:12px">COMPILER DIAGNOSTICS</div><pre class="console-pre" style="margin-top:5px">\${esc(data.compileOutput)}</pre>\`:''}
-      \${isRunning?'<div class="small-note" style="margin-top:8px">Each test is executed with its own standard input. Please keep this tab open until evaluation finishes.</div>':''}
+      ${isCompileError && data.compileOutput?`<div class="sample-label" style="margin-top:12px">COMPILER DIAGNOSTICS</div><pre class="console-pre" style="margin-top:5px">${esc(data.compileOutput)}</pre>`:''}
+      ${isRunning?'<div class="small-note" style="margin-top:8px">Each test is executed with its own standard input. Please keep this tab open until evaluation finishes.</div>':''}
     </div>
     <div class="section-label" style="margin:2px 0 0">TEST CASE BREAKDOWN</div>
-    <div class="test-result-list">\${results.map((result,i)=>\`<div class="test-result" style="padding:10px">
+    <div class="test-result-list">${results.map((result,i)=>`<div class="test-result" style="padding:10px">
       <div class="test-result-top">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><strong>Test case \${result.index ?? i+1}</strong><span class="status-chip">\${result.visible?'Shown · Sample':'Hidden test'}</span></div>
-        <span class="\${statusClass(result)}" style="font-weight:800">\${result.passed?'✓ ':result.status==='not_run'?'○ ':'✕ '}\${statusLabel(result)}</span>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><strong>Test case ${result.index ?? i+1}</strong><span class="status-chip">${result.visible?'Shown · Sample':'Hidden test'}</span></div>
+        <span class="${statusClass(result)}" style="font-weight:800">${result.passed?'✓ ':result.status==='not_run'?'○ ':'✕ '}${statusLabel(result)}</span>
       </div>
-      \${result.visible?\`<div class="section-label" style="margin-top:9px">INPUT</div><pre class="format-block">\${esc(result.input ?? '')}</pre>
-        <div class="sample-grid" style="margin-top:8px"><div><div class="sample-label">EXPECTED OUTPUT</div><pre>\${esc(result.expected ?? '')}</pre></div><div><div class="sample-label">YOUR OUTPUT</div><pre>\${esc(result.actual ?? '')}</pre></div></div>
-        \${result.stderr?\`<div class="sample-label" style="margin-top:8px">DIAGNOSTICS</div><pre class="console-pre">\${esc(result.stderr)}</pre>\`:''}
-      \`:\`<div class="small-note" style="margin-top:7px">\${result.status==='not_run'?'This case was not executed because the source did not compile.':'The hidden case was executed. Its input and expected output are deliberately not displayed; only its verdict is shown.'}</div>\`}
-    </div>\`).join('') || '<div class="console-empty">Waiting for the first test case…</div>'}</div>
-    <div class="small-note">\${accepted?'Accepted. Your program passed every shown and hidden test case.':isRunning?'Evaluation is still in progress.':'Review the failed shown cases and adjust your logic before submitting again.'}</div>
-  </div>\`;
+      ${result.visible?`<div class="section-label" style="margin-top:9px">INPUT</div><pre class="format-block">${esc(result.input ?? '')}</pre>
+        <div class="sample-grid" style="margin-top:8px"><div><div class="sample-label">EXPECTED OUTPUT</div><pre>${esc(result.expected ?? '')}</pre></div><div><div class="sample-label">YOUR OUTPUT</div><pre>${esc(result.actual ?? '')}</pre></div></div>
+        ${result.stderr?`<div class="sample-label" style="margin-top:8px">DIAGNOSTICS</div><pre class="console-pre">${esc(result.stderr)}</pre>`:''}
+      `:`<div class="small-note" style="margin-top:7px">${result.status==='not_run'?'This case was not executed because the source did not compile.':'The hidden case was executed. Its input and expected output are deliberately not displayed; only its verdict is shown.'}</div>`}
+    </div>`).join('') || '<div class="console-empty">Waiting for the first test case…</div>'}</div>
+    <div class="small-note">${accepted?'Accepted. Your program passed every shown and hidden test case.':isRunning?'Evaluation is still in progress.':'Review the failed shown cases and adjust your logic before submitting again.'}</div>
+  </div>`;
 }
 
 function renderExam() {
