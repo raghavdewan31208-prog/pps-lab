@@ -327,7 +327,7 @@ function __runtimeResult(raw) {
     compileOutput: String(compileOutput || (compilerError ? message : '') || '')
   };
 }
-async function api(url, payload) {
+async function api(url, payload, onProgress) {
   if (url === '/api/questions') return { questions: __publicBank };
   if (url === '/api/health') {
     const compilerName = await __ensureCompiler();
@@ -342,27 +342,87 @@ async function api(url, payload) {
     const q = __privateBank.find(item => item.id === payload?.questionId);
     if (!q || q.mode === 'predict') throw new Error('Question not found.');
     if (!payload?.code?.trim()) throw new Error('Write your solution before submitting.');
-    const testResults=[]; let passed=0; let fatal=null;
-    for (let index=0; index<(q.tests||[]).length; index++) {
+    const tests = q.tests || [];
+    const total = tests.length;
+    if (!total) throw new Error('This question does not have an evaluation test suite yet.');
+
+    const testResults = [];
+    let passed = 0;
+    let compileOutput = '';
+    let fatalStatus = '';
+    let executionTimeMs = 0;
+    const visibleFor = input => (q.samples || []).some(sample => sample.input === input);
+    const publishProgress = status => {
+      if (typeof onProgress !== 'function') return;
+      try {
+        onProgress({
+          status, passed, total, accepted:false, executionTimeMs,
+          testResults:testResults.slice(),
+          compileOutput:compileOutput || undefined
+        });
+      } catch (error) {
+        console.warn('Could not update test progress', error);
+      }
+    };
+
+    publishProgress('running');
+    for (let index = 0; index < total; index++) {
+      const test = tests[index];
+      const visible = visibleFor(test.input);
       let raw;
-      try { raw=await __runRemote(payload.code, q.tests[index].input || ''); }
-      catch(error) { fatal='runtime_error'; testResults.push({index:index+1,passed:false,visible:false,status:fatal}); break; }
-      const run=__runtimeResult(raw);
-      if (!run.compiled || run.status !== 'success') {
-        fatal=run.status==='time_limit'?'time_limit':(run.status==='compile_error'?'compile_error':'runtime_error');
-        testResults.push({index:index+1,passed:false,visible:q.samples?.some(s=>s.input===q.tests[index].input),input:q.tests[index].input,expected:q.tests[index].expected,actual:run.stdout,stderr:run.stderr,status:fatal});
+      try {
+        raw = await __runRemote(payload.code, test.input || '');
+      } catch (error) {
+        // A network/provider failure is not a failed student test case.
+        throw new Error('Compiler service failed while running test case ' + (index + 1) + ': ' + (error?.message || 'Unknown compiler-service error'));
+      }
+
+      const run = __runtimeResult(raw);
+      executionTimeMs += Number(run.timeMs || 0);
+
+      if (!run.compiled || run.status === 'compile_error') {
+        compileOutput = run.compileOutput || run.stderr || 'Compilation failed.';
+        fatalStatus = 'compile_error';
+        testResults.push({
+          index:index+1, passed:false, visible, status:'compile_error',
+          ...(visible ? {input:test.input,expected:test.expected,actual:run.stdout || '',stderr:run.stderr || compileOutput} : {})
+        });
+        for (let remaining = index + 1; remaining < total; remaining++) {
+          const later = tests[remaining];
+          testResults.push({
+            index:remaining+1, passed:false, visible:visibleFor(later.input),
+            status:'not_run', reason:'Source did not compile.'
+          });
+        }
+        publishProgress('compile_error');
         break;
       }
-      const isVisible=(q.samples||[]).some(sample=>sample.input===q.tests[index].input);
-      const pass=__normalise(run.stdout)===__normalise(q.tests[index].expected);
-      if(pass) passed++;
-      const row={index:index+1,passed:pass,visible:isVisible};
-      if(isVisible){row.input=q.tests[index].input;row.expected=q.tests[index].expected;row.actual=run.stdout;row.stderr=run.stderr;}
+
+      const isRuntimeFailure = run.status !== 'success';
+      const pass = !isRuntimeFailure && __normalise(run.stdout) === __normalise(test.expected);
+      const status = isRuntimeFailure ? run.status : (pass ? 'passed' : 'wrong_answer');
+      if (pass) passed++;
+      if (isRuntimeFailure && !fatalStatus) fatalStatus = run.status;
+
+      const row = {index:index+1,passed:pass,visible,status};
+      if (visible) {
+        row.input = test.input;
+        row.expected = test.expected;
+        row.actual = run.stdout || '';
+        row.stderr = run.stderr || '';
+      }
       testResults.push(row);
+      publishProgress('running');
     }
-    const total=(q.tests||[]).length;
-    const accepted=passed===total && !fatal;
-    return {status:fatal || (accepted?'accepted':'wrong_answer'),compiled:!(fatal==='runtime_error'||fatal==='compile_error'),compileOutput:fatal==='compile_error'?(testResults.at(-1)?.stderr||'Compilation failed.'):undefined,passed,total,accepted,testResults};
+
+    const accepted = passed === total && !fatalStatus && testResults.length === total;
+    const status = accepted ? 'accepted' : (fatalStatus || 'wrong_answer');
+    const result = {
+      status, compiled:status !== 'compile_error', compileOutput:compileOutput || undefined,
+      passed, total, accepted, executionTimeMs, testResults
+    };
+    publishProgress(status);
+    return result;
   }
   if (url.startsWith('/api/solution/')) {
     const id=decodeURIComponent(url.slice('/api/solution/'.length));
@@ -541,7 +601,7 @@ function renderPredictEditor(q) {
 
 function renderConsole() {
   const data = state.consoleData;
-  return `<div class="console-wrap"><div class="console-tabs"><button class="console-tab ${state.consoleTab==='output'?'active':''}" data-action="console-tab" data-tab="output">Output</button><button class="console-tab ${state.consoleTab==='tests'?'active':''}" data-action="console-tab" data-tab="tests">Test results</button><button class="console-tab ${state.consoleTab==='input'?'active':''}" data-action="console-tab" data-tab="input">Custom input</button><span style="margin-left:auto" class="small-note">64 KB output cap · 2s execution limit</span></div><div class="console-content">${state.consoleTab==='input'?`<div class="section-label">STANDARD INPUT (CIN)</div><textarea class="field" id="custom-input" rows="5" style="height:100%;min-height:105px;padding:10px;font:10px/1.5 var(--mono);resize:vertical" placeholder="Enter input exactly as you would in the terminal…">${esc(state.customInput)}</textarea>`:state.consoleTab==='tests'?renderTestOutput(data):renderRunOutput(data)}</div></div>`;
+  return `<div class="console-wrap"><div class="console-tabs"><button class="console-tab ${state.consoleTab==='output'?'active':''}" data-action="console-tab" data-tab="output">Output</button><button class="console-tab ${state.consoleTab==='tests'?'active':''}" data-action="console-tab" data-tab="tests">Test cases</button><button class="console-tab ${state.consoleTab==='input'?'active':''}" data-action="console-tab" data-tab="input">Custom input</button><span style="margin-left:auto" class="small-note">64 KB output cap · 2s execution limit</span></div><div class="console-content">${state.consoleTab==='input'?`<div class="section-label">STANDARD INPUT (CIN)</div><textarea class="field" id="custom-input" rows="5" style="height:100%;min-height:105px;padding:10px;font:10px/1.5 var(--mono);resize:vertical" placeholder="Enter input exactly as you would in the terminal…">${esc(state.customInput)}</textarea>`:state.consoleTab==='tests'?renderTestOutput(data):renderRunOutput(data)}</div></div>`;
 }
 function renderRunOutput(data) {
   if (!data) return `<div class="console-empty">Run your code to see standard output and compiler diagnostics here.</div>`;
@@ -550,30 +610,65 @@ function renderRunOutput(data) {
   return `<div class="console-status"><i class="status-dot ${data.status==='success'?'online':'offline'}"></i>${label} · ${data.timeMs||0} ms</div>${data.stdout?`<div class="section-label">STANDARD OUTPUT</div><pre class="console-pre">${esc(data.stdout)}</pre>`:`<div class="console-empty">Program produced no standard output.</div>`}${data.stderr?`<div class="section-label" style="margin-top:10px">STANDARD ERROR</div><pre class="console-pre">${esc(data.stderr)}</pre>`:''}`;
 }
 function renderTestOutput(data) {
-  if (!data) return `<div class="console-empty">Submit your solution to run it against the question's test suite. Each case will be reported separately here.</div>`;
-  if (data.status==='compile_error') return `<div class="console-status"><i class="status-dot offline"></i><strong>Compilation failed</strong></div><div class="test-result"><div class="sample-label">COMPILER DIAGNOSTICS</div><pre class="console-pre">${esc(data.compileOutput || 'Compilation failed.')}</pre></div>`;
+  if (!data) return \`<div class="console-empty">Submit your code to run every shown and hidden test case. Results will appear here one by one.</div>\`;
+  if (data.status === 'service_error') {
+    return \`<div class="console-status"><i class="status-dot offline"></i><strong>Compiler service unavailable</strong></div><pre class="console-pre">\${esc(data.error || 'The compiler service did not return a result. Your answer was not graded.')}</pre>\`;
+  }
+
   const results = data.testResults || [];
   const total = Number(data.total ?? results.length);
-  const passed = Number(data.passed ?? results.filter(x=>x.passed).length);
-  const failed = Math.max(0,total-passed);
-  const status = data.accepted ? 'Accepted · All test cases passed' : data.status==='time_limit' ? 'Time limit exceeded' : data.status==='runtime_error' ? 'Runtime error' : data.status==='output_limit' ? 'Output limit exceeded' : 'Wrong answer · Some test cases failed';
-  const pct = total ? Math.round(passed/total*100) : 0;
-  return `<div style="display:grid;gap:11px">
-    <div class="test-result" style="padding:12px;border-color:${data.accepted?'#28634f':'#68404a'};background:${data.accepted?'#102a24':'#2a1a22'}">
+  const passed = Number(data.passed ?? results.filter(item=>item.passed).length);
+  const checked = results.filter(item=>item.status !== 'not_run').length;
+  const failed = results.filter(item=>!item.passed && item.status !== 'not_run').length;
+  const notRun = results.filter(item=>item.status === 'not_run').length;
+  const isRunning = data.status === 'running';
+  const isCompileError = data.status === 'compile_error';
+  const accepted = Boolean(data.accepted);
+  const headline = isRunning ? \`Checking test cases… \${checked}/\${total}\`
+    : accepted ? 'Accepted · All test cases passed'
+    : isCompileError ? 'Compilation Error'
+    : data.status === 'time_limit' ? 'Time Limit Exceeded'
+    : data.status === 'runtime_error' ? 'Runtime Error'
+    : 'Wrong Answer · Some test cases failed';
+  const tone = accepted ? 'success' : (isRunning ? 'running' : 'failure');
+  const pct = total ? Math.round((isRunning ? checked : passed) / total * 100) : 0;
+  const statusLabel = result => {
+    if (result.status === 'not_run') return 'NOT RUN';
+    if (result.status === 'compile_error') return 'COMPILATION ERROR';
+    if (result.status === 'time_limit') return 'TIME LIMIT';
+    if (result.status === 'runtime_error') return 'RUNTIME ERROR';
+    if (result.status === 'service_error') return 'SERVICE ERROR';
+    return result.passed ? 'PASSED' : 'WRONG ANSWER';
+  };
+  const statusClass = result => result.passed ? 'test-pass' : 'test-fail';
+
+  return \`<div style="display:grid;gap:11px">
+    <div class="test-result" style="padding:12px;border-color:\${accepted?'#28634f':isRunning?'#385781':'#68404a'};background:\${accepted?'#102a24':isRunning?'#14243a':'#2a1a22'}">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:9px"><span class="status-dot ${data.accepted?'online':'offline'}"></span><strong style="font-size:12px">${status}</strong></div>
-        <strong style="font:700 15px var(--mono);color:${data.accepted?'var(--green)':'var(--red)'}">${passed}/${total}</strong>
+        <div style="display:flex;align-items:center;gap:9px"><span class="status-dot \${accepted?'online':isRunning?'':'offline'}"></span><strong style="font-size:12px">\${headline}</strong></div>
+        <strong style="font:700 15px var(--mono);color:\${accepted?'var(--green)':isRunning?'var(--blue)':'var(--red)'}">\${passed}/\${total}</strong>
       </div>
-      <div style="height:7px;background:#202c40;border-radius:20px;overflow:hidden;margin-top:11px"><div style="height:100%;width:${pct}%;background:${data.accepted?'var(--green)':'var(--blue)'};border-radius:20px"></div></div>
-      <div style="display:flex;gap:13px;margin-top:9px;font-size:9px;color:#9aabc2"><span>✓ ${passed} passed</span><span>✕ ${failed} failed</span><span>${total} total</span></div>
+      <div style="height:7px;background:#202c40;border-radius:20px;overflow:hidden;margin-top:11px"><div style="height:100%;width:\${pct}%;background:\${accepted?'var(--green)':isRunning?'var(--blue)':'var(--red)'};border-radius:20px;transition:width .2s"></div></div>
+      <div style="display:flex;gap:13px;flex-wrap:wrap;margin-top:9px;font-size:9px;color:#9aabc2">
+        <span>✓ \${passed} passed</span><span>✕ \${failed} failed</span><span>◷ \${notRun} not run</span><span>\${total} total</span>
+        \${data.executionTimeMs?'<span>CPU '+Math.round(data.executionTimeMs)+' ms</span>':''}
+      </div>
+      \${isCompileError && data.compileOutput?\`<div class="sample-label" style="margin-top:12px">COMPILER DIAGNOSTICS</div><pre class="console-pre" style="margin-top:5px">\${esc(data.compileOutput)}</pre>\`:''}
+      \${isRunning?'<div class="small-note" style="margin-top:8px">Each test is executed with its own standard input. Please keep this tab open until evaluation finishes.</div>':''}
     </div>
     <div class="section-label" style="margin:2px 0 0">TEST CASE BREAKDOWN</div>
-    <div class="test-result-list">${results.map((result,i)=>`<div class="test-result" style="padding:10px">
-      <div class="test-result-top"><div style="display:flex;align-items:center;gap:8px"><strong>Test case ${result.index ?? i+1}</strong><span class="status-chip">${result.visible?'Sample':'Hidden test'}</span></div><span class="${result.passed?'test-pass':'test-fail'}" style="font-weight:800">${result.passed?'✓ PASSED':'✕ FAILED'}</span></div>
-      ${result.visible?`<div class="sample-grid"><div><div class="sample-label">EXPECTED OUTPUT</div><pre>${esc(result.expected ?? '')}</pre></div><div><div class="sample-label">YOUR OUTPUT</div><pre>${esc(result.actual ?? '')}</pre></div></div>${result.stderr?`<div class="sample-label" style="margin-top:8px">ERROR DETAILS</div><pre>${esc(result.stderr)}</pre>`:''}`:`<div class="small-note">Private evaluation case. Its input and expected output are kept hidden; the pass/fail result is shown.</div>`}
-    </div>`).join('') || '<div class="console-empty">The compiler returned no individual test-case details.</div>'}</div>
-    <div class="small-note">${data.accepted?'Accepted. Your solution passed the complete test suite.':'Review the failed visible cases, then test edge cases such as zero, negative values, minimum sizes and repeated values where relevant.'}</div>
-  </div>`;
+    <div class="test-result-list">\${results.map((result,i)=>\`<div class="test-result" style="padding:10px">
+      <div class="test-result-top">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><strong>Test case \${result.index ?? i+1}</strong><span class="status-chip">\${result.visible?'Shown · Sample':'Hidden test'}</span></div>
+        <span class="\${statusClass(result)}" style="font-weight:800">\${result.passed?'✓ ':result.status==='not_run'?'○ ':'✕ '}\${statusLabel(result)}</span>
+      </div>
+      \${result.visible?\`<div class="section-label" style="margin-top:9px">INPUT</div><pre class="format-block">\${esc(result.input ?? '')}</pre>
+        <div class="sample-grid" style="margin-top:8px"><div><div class="sample-label">EXPECTED OUTPUT</div><pre>\${esc(result.expected ?? '')}</pre></div><div><div class="sample-label">YOUR OUTPUT</div><pre>\${esc(result.actual ?? '')}</pre></div></div>
+        \${result.stderr?\`<div class="sample-label" style="margin-top:8px">DIAGNOSTICS</div><pre class="console-pre">\${esc(result.stderr)}</pre>\`:''}
+      \`:\`<div class="small-note" style="margin-top:7px">\${result.status==='not_run'?'This case was not executed because the source did not compile.':'The hidden case was executed. Its input and expected output are deliberately not displayed; only its verdict is shown.'}</div>\`}
+    </div>\`).join('') || '<div class="console-empty">Waiting for the first test case…</div>'}</div>
+    <div class="small-note">\${accepted?'Accepted. Your program passed every shown and hidden test case.':isRunning?'Evaluation is still in progress.':'Review the failed shown cases and adjust your logic before submitting again.'}</div>
+  </div>\`;
 }
 
 function renderExam() {
@@ -743,20 +838,27 @@ async function runCurrentCode(submit) {
   state.consoleTab=submit?'tests':'output';
   state.busy=true;
   const content=$('.console-content');
-  if(content) content.innerHTML='<div class="console-status"><i class="status-dot"></i> Compiling with g++…</div><div class="console-empty">Your program is being evaluated. No simulated output here.</div>';
+  if(content) content.innerHTML=submit
+    ? '<div class="console-status"><i class="status-dot"></i> Starting test suite…</div><div class="console-empty">Your shown and hidden test cases will be checked one by one.</div>'
+    : '<div class="console-status"><i class="status-dot"></i> Compiling with g++…</div><div class="console-empty">Your program is running with the custom input.</div>';
   $$('[data-action="run-code"],[data-action="submit-code"]').forEach(b=>b.disabled=true);
   $$('.console-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===state.consoleTab));
   try {
-    const data=submit ? await api('/api/submit',{questionId:q.id,code}) : await api('/api/run',{code,stdin:state.customInput});
+    const data=submit
+      ? await api('/api/submit',{questionId:q.id,code},progress=>{
+          state.consoleData=progress;
+          const liveContent=$('.console-content');
+          if(liveContent && state.consoleTab==='tests') liveContent.innerHTML=renderTestOutput(progress);
+        })
+      : await api('/api/run',{code,stdin:state.customInput});
     state.consoleData=data;
-    if(submit){
+    if(submit && data.status!=='service_error'){
       recordOutcome(q,Boolean(data.accepted),Date.now()-state.questionStartedAt,'practice');
-      if(data.accepted){toast('Accepted. All test cases passed.','success');if(q.id===dailyChallengeQuestion()?.id){const key=localDateKey();if(!state.progress.dailyCompleted.includes(key))state.progress.dailyCompleted.push(key);saveProgress();}}
-      else toast(data.status==='compile_error'?'Compilation failed. Check the diagnostics.':'Some tests failed. Inspect the visible cases.','error');
+      if(data.accepted){toast('Accepted. All shown and hidden test cases passed.','success');if(q.id===dailyChallengeQuestion()?.id){const key=localDateKey();if(!state.progress.dailyCompleted.includes(key))state.progress.dailyCompleted.push(key);saveProgress();}}
+      else toast(data.status==='compile_error'?'Compilation failed. Check the diagnostics.':'Some test cases failed. Inspect the results panel.','error');
     }
   } catch(error) {
-    state.consoleData={status:'runtime_error',error:error.message,stdout:'',stderr:''};
-    if(submit) recordOutcome(q,false,Date.now()-state.questionStartedAt,'practice');
+    state.consoleData={status:'service_error',error:error.message,stdout:'',stderr:''};
     toast(error.message,'error');
   } finally {
     state.busy=false;
