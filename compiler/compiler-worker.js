@@ -6,7 +6,7 @@
 'use strict';
 self.importScripts('wasm-clang/shared.js');
 
-const WASM_BASE = 'wasm/';
+const WASM_BASE = '../wasm/';
 const ARROW = '\x1b[1;93m>\x1b[0m ';
 const BUILTINS = 'lib/clang/8.0.1/lib/wasi/libclang_rt.builtins-wasm32.a';
 const LIBDIR = 'lib/wasm32-wasi';
