@@ -1,52 +1,56 @@
 /*
- * One isolated execution per test case. The parent can terminate this worker
- * on timeout without freezing or killing the PPS Lab page.
+ * Runs a complete test suite in one isolated worker using the in-browser
+ * Clang/WASI toolchain. The parent terminates this worker on suite timeout.
  */
 'use strict';
-self.importScripts('wasm-clang/shared.js');
-
-async function readBuffer(filename) {
-  const response = await fetch(filename, {cache:'force-cache'});
-  if (!response.ok) throw new Error('Could not load runner asset ' + filename + ' (HTTP ' + response.status + ').');
-  return response.arrayBuffer();
+importScripts('wasm-clang/shared.js');
+function readBuffer(filename) {
+  return fetch(filename, {cache:'force-cache'}).then(response => {
+    if (!response.ok) throw new Error('Could not load ' + filename + ' (HTTP ' + response.status + ').');
+    return response.arrayBuffer();
+  });
 }
-async function compileStreaming(filename) {
-  return WebAssembly.compile(await readBuffer(filename));
+function compileStreaming(filename) {
+  return readBuffer(filename).then(buffer => WebAssembly.compile(buffer));
 }
 function cleanAnsi(value) {
   return String(value || '').replace(/\x1b\[[0-9;]*m/g, '').replace(/\r/g, '');
 }
 self.onmessage = async event => {
   const message = event.data || {};
-  if (message.id !== 'run') return;
-  let output = '';
+  if (message.id !== 'run-suite') return;
+  let currentOutput = '';
   try {
     const module = message.data?.module;
-    if (!(module instanceof WebAssembly.Module)) throw new Error('The compiled C++ module was not received by the runner.');
-    const memfs = new API.MemFS({
+    const tests = message.data?.tests || [];
+    if (!(module instanceof WebAssembly.Module)) throw new Error('Compiled C++ module missing.');
+    const api = new API({
+      readBuffer,
       compileStreaming,
-      hostWrite:chunk => {
-        output += String(chunk ?? '');
-        if (output.length > 200000) throw new Error('Output limit exceeded (200 KB).');
-      },
-      memfsFilename:'wasm/memfs'
+      hostWrite:chunk => { currentOutput += String(chunk ?? ''); },
+      clang:'wasm/clang',
+      lld:'wasm/lld',
+      memfs:'wasm/memfs',
+      sysroot:'wasm/sysroot.tar'
     });
-    await memfs.ready;
-    memfs.setStdinStr(String(message.data?.stdin ?? ''));
-    const app = new API.App(module, memfs, 'main');
-    await app.run();
-    self.postMessage({id:'result',data:{status:'success',stdout:output,stderr:''}});
-  } catch (error) {
-    const text = cleanAnsi(output);
-    const runtimeStatus = /Output limit exceeded/.test(error?.message || '') ? 'output_limit' : 'runtime_error';
-    self.postMessage({
-      id:'result',
-      data:{
-        status:runtimeStatus,
-        stdout:text,
-        stderr:cleanAnsi(error?.message || String(error)),
-        exitCode:API.isProcExit && API.isProcExit(error) ? error.code : null
+    await api.ready;
+    for (let i=0;i<tests.length;i++) {
+      currentOutput = '';
+      api.memfs.setStdinStr(String(tests[i].input ?? ''));
+      try {
+        await api.run(module,'main');
+        self.postMessage({id:'case',data:{index:i,status:'success',stdout:cleanAnsi(currentOutput),stderr:''}});
+      } catch (error) {
+        const messageText=cleanAnsi(error?.message || String(error));
+        const exitMatch=messageText.match(/process exited with code (-?\d+)/);
+        self.postMessage({id:'case',data:{
+          index:i,status:'runtime_error',stdout:cleanAnsi(currentOutput),
+          stderr:messageText,exitCode:exitMatch?Number(exitMatch[1]):null
+        }});
       }
-    });
+    }
+    self.postMessage({id:'suite-done'});
+  } catch (error) {
+    self.postMessage({id:'fatal',data:{message:cleanAnsi(error?.message || String(error))}});
   }
 };
