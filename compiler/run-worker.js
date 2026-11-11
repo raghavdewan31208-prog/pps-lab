@@ -28,10 +28,10 @@ self.onmessage = async event => {
       readBuffer,
       compileStreaming,
       hostWrite:chunk => { currentOutput += String(chunk ?? ''); },
-      clang:'wasm/clang',
-      lld:'wasm/lld',
-      memfs:'wasm/memfs',
-      sysroot:'wasm/sysroot.tar'
+      clang:'../wasm/clang',
+      lld:'../wasm/lld',
+      memfs:'../wasm/memfs',
+      sysroot:'../wasm/sysroot.tar'
     });
     await api.ready;
     for (let i=0;i<tests.length;i++) {
