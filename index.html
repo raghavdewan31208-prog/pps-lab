@@ -550,10 +550,30 @@ function renderRunOutput(data) {
   return `<div class="console-status"><i class="status-dot ${data.status==='success'?'online':'offline'}"></i>${label} · ${data.timeMs||0} ms</div>${data.stdout?`<div class="section-label">STANDARD OUTPUT</div><pre class="console-pre">${esc(data.stdout)}</pre>`:`<div class="console-empty">Program produced no standard output.</div>`}${data.stderr?`<div class="section-label" style="margin-top:10px">STANDARD ERROR</div><pre class="console-pre">${esc(data.stderr)}</pre>`:''}`;
 }
 function renderTestOutput(data) {
-  if (!data) return `<div class="console-empty">Submit your solution to evaluate it against the sample and hidden test cases.</div>`;
-  if (data.status==='compile_error') return `<div class="console-status"><i class="status-dot offline"></i> Compilation failed</div><pre class="console-pre">${esc(data.compileOutput || 'Compilation failed.')}</pre>`;
-  const status = data.accepted ? 'All test cases passed' : data.status==='time_limit' ? 'Time limit exceeded' : data.status==='runtime_error' ? 'Runtime error' : data.status==='output_limit' ? 'Output limit exceeded' : 'Some test cases failed';
-  return `<div class="console-status"><i class="status-dot ${data.accepted?'online':'offline'}"></i><strong>${status}</strong><span style="margin-left:auto">${data.passed||0} / ${data.total||0} passed</span></div><div class="test-result-list">${(data.testResults||[]).map(result=>`<div class="test-result"><div class="test-result-top"><strong>Test case ${result.index}${result.visible?' · Sample':' · Hidden'}</strong><span class="${result.passed?'test-pass':'test-fail'}">${result.passed?'PASSED':'FAILED'}</span></div>${result.visible?`<div class="sample-grid"><div><div class="sample-label">EXPECTED</div><pre>${esc(result.expected)}</pre></div><div><div class="sample-label">YOUR OUTPUT</div><pre>${esc(result.actual)}</pre></div></div>${result.stderr?`<pre>${esc(result.stderr)}</pre>`:''}`:`<div class="small-note">Hidden evaluation case. Input and expected output are not disclosed.</div>`}</div>`).join('')}</div><div class="small-note" style="margin-top:8px">${data.accepted?'Accepted. Keep practising without relying on the reference solution.':'Use the visible comparison and your own edge cases to locate the issue. Hidden cases remain private.'}</div>`;
+  if (!data) return `<div class="console-empty">Submit your solution to run it against the question's test suite. Each case will be reported separately here.</div>`;
+  if (data.status==='compile_error') return `<div class="console-status"><i class="status-dot offline"></i><strong>Compilation failed</strong></div><div class="test-result"><div class="sample-label">COMPILER DIAGNOSTICS</div><pre class="console-pre">${esc(data.compileOutput || 'Compilation failed.')}</pre></div>`;
+  const results = data.testResults || [];
+  const total = Number(data.total ?? results.length);
+  const passed = Number(data.passed ?? results.filter(x=>x.passed).length);
+  const failed = Math.max(0,total-passed);
+  const status = data.accepted ? 'Accepted · All test cases passed' : data.status==='time_limit' ? 'Time limit exceeded' : data.status==='runtime_error' ? 'Runtime error' : data.status==='output_limit' ? 'Output limit exceeded' : 'Wrong answer · Some test cases failed';
+  const pct = total ? Math.round(passed/total*100) : 0;
+  return `<div style="display:grid;gap:11px">
+    <div class="test-result" style="padding:12px;border-color:${data.accepted?'#28634f':'#68404a'};background:${data.accepted?'#102a24':'#2a1a22'}">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:9px"><span class="status-dot ${data.accepted?'online':'offline'}"></span><strong style="font-size:12px">${status}</strong></div>
+        <strong style="font:700 15px var(--mono);color:${data.accepted?'var(--green)':'var(--red)'}">${passed}/${total}</strong>
+      </div>
+      <div style="height:7px;background:#202c40;border-radius:20px;overflow:hidden;margin-top:11px"><div style="height:100%;width:${pct}%;background:${data.accepted?'var(--green)':'var(--blue)'};border-radius:20px"></div></div>
+      <div style="display:flex;gap:13px;margin-top:9px;font-size:9px;color:#9aabc2"><span>✓ ${passed} passed</span><span>✕ ${failed} failed</span><span>${total} total</span></div>
+    </div>
+    <div class="section-label" style="margin:2px 0 0">TEST CASE BREAKDOWN</div>
+    <div class="test-result-list">${results.map((result,i)=>`<div class="test-result" style="padding:10px">
+      <div class="test-result-top"><div style="display:flex;align-items:center;gap:8px"><strong>Test case ${result.index ?? i+1}</strong><span class="status-chip">${result.visible?'Sample':'Hidden test'}</span></div><span class="${result.passed?'test-pass':'test-fail'}" style="font-weight:800">${result.passed?'✓ PASSED':'✕ FAILED'}</span></div>
+      ${result.visible?`<div class="sample-grid"><div><div class="sample-label">EXPECTED OUTPUT</div><pre>${esc(result.expected ?? '')}</pre></div><div><div class="sample-label">YOUR OUTPUT</div><pre>${esc(result.actual ?? '')}</pre></div></div>${result.stderr?`<div class="sample-label" style="margin-top:8px">ERROR DETAILS</div><pre>${esc(result.stderr)}</pre>`:''}`:`<div class="small-note">Private evaluation case. Its input and expected output are kept hidden; the pass/fail result is shown.</div>`}
+    </div>`).join('') || '<div class="console-empty">The compiler returned no individual test-case details.</div>'}</div>
+    <div class="small-note">${data.accepted?'Accepted. Your solution passed the complete test suite.':'Review the failed visible cases, then test edge cases such as zero, negative values, minimum sizes and repeated values where relevant.'}</div>
+  </div>`;
 }
 
 function renderExam() {
