@@ -2,16 +2,18 @@
 
 A browser-based C++17 exam practice workspace for first-year PPS practical preparation.
 
-The live site is deployed with GitHub Pages. C++ submissions use the public Judge0 CE service and may be subject to availability or rate limits.
+The live site is deployed with GitHub Pages. C++ compilation and execution use the bundled local Clang/WASI WebAssembly toolchain. No public Judge0 endpoint or API key is required.
 
 ## Use
 Open the GitHub Pages URL in a modern browser. No local installation is required.
 
 ## Features
-- 80 full-code questions
+- 144 full-code questions (80 existing + 64 syllabus-focused exam questions)
 - 25 debugging exercises
 - 20 fill-in-code exercises
 - 12 output-prediction questions
+- Nine dedicated exam sections: 1D arrays, 2D matrices, searching, sorting, pointers, pointer-to-pointer, DMA, functions and recursion
+- Four evaluation cases per new exam question, with samples, hints and hidden-in-app solutions
 - Browser-local progress tracking
 - C++17 compilation via Judge0 CE
 
