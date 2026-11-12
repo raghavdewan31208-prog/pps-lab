@@ -250,7 +250,7 @@ function toast(message, type = '') {
   setTimeout(() => item.remove(), 3200);
 }
 // Browser-only build: no local server, Node installation or GCC setup required.
-// Compiler provider: Judge0 CE (public demo instance), using GCC 14.1 with -std=c++17.
+// Compiler provider: bundled local Clang/WASI WebAssembly toolchain, using C++17.
 const __privateBank = window.__PPS_PRIVATE_BANK;
 const __publicBank = window.__PPS_PUBLIC_BANK;
 const __examBank = Array.isArray(window.__PPS_EXAM_QUESTION_BANK) ? window.__PPS_EXAM_QUESTION_BANK : [];
@@ -712,7 +712,10 @@ function filterBankRows() {
 }
 
 /* Local WebAssembly compiler: no Judge0, no API key, no CORS dependency. */
+const __compiledModuleCache = new Map();
 function __compileWithLocalClang(source, onProgress) {
+  const cacheKey=String(source || '');
+  if(__compiledModuleCache.has(cacheKey)) return Promise.resolve(__compiledModuleCache.get(cacheKey));
   return new Promise((resolve,reject)=>{
     const worker=new Worker('compiler/compiler-worker.js');
     let settled=false;
@@ -721,7 +724,11 @@ function __compileWithLocalClang(source, onProgress) {
     worker.onmessage=event=>{
       const {id,data}=event.data||{};
       if(id==='phase'||id==='progress'){if(onProgress)onProgress(data);return;}
-      if(id==='compiled')finish(resolve,data.module);
+      if(id==='compiled'){
+        __compiledModuleCache.set(cacheKey,data.module);
+        while(__compiledModuleCache.size>4) __compiledModuleCache.delete(__compiledModuleCache.keys().next().value);
+        finish(resolve,data.module);
+      }
       else if(id==='failed')finish(resolve,{__compileFailure:true,...data});
       else if(id==='fatal')finish(reject,new Error(data?.message||'The local compiler could not start.'));
     };
