@@ -48,6 +48,9 @@ jobs:
           test -s compiler/wasm-clang/shared.js
           du -sh wasm
 
+      - name: Smoke-test the bundled WebAssembly C++17 compiler
+        run: node scripts/smoke-wasm-compiler.cjs
+
       - name: Enable and configure Pages
         uses: actions/configure-pages@v5
         with:
