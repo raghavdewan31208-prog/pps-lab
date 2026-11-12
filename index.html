@@ -712,33 +712,27 @@ function filterBankRows() {
 }
 
 /* Local WebAssembly compiler: no Judge0, no API key, no CORS dependency. */
-const __compiledModuleCache = new Map();
 function __compileWithLocalClang(source, onProgress) {
-  const cacheKey=String(source || '');
-  if(__compiledModuleCache.has(cacheKey)) return Promise.resolve(__compiledModuleCache.get(cacheKey));
   return new Promise((resolve,reject)=>{
-    const worker=new Worker('compiler/compiler-worker.js');
+    const worker=new Worker(new URL('compiler/compiler-worker.js', document.baseURI));
     let settled=false;
     const finish=(fn,value)=>{if(settled)return;settled=true;clearTimeout(timer);worker.terminate();fn(value);};
     const timer=setTimeout(()=>finish(reject,new Error('The local C++ compiler took too long to initialize. Refresh the page and retry.')),180000);
     worker.onmessage=event=>{
       const {id,data}=event.data||{};
       if(id==='phase'||id==='progress'){if(onProgress)onProgress(data);return;}
-      if(id==='compiled'){
-        __compiledModuleCache.set(cacheKey,data.module);
-        while(__compiledModuleCache.size>4) __compiledModuleCache.delete(__compiledModuleCache.keys().next().value);
-        finish(resolve,data.module);
-      }
+      if(id==='compiled')finish(resolve,data.module);
       else if(id==='failed')finish(resolve,{__compileFailure:true,...data});
       else if(id==='fatal')finish(reject,new Error(data?.message||'The local compiler could not start.'));
     };
-    worker.onerror=event=>finish(reject,new Error(event.message||'The local compiler worker failed to load.'));
+    worker.onerror=event=>finish(reject,new Error(event.message||'The local compiler worker failed to load. Check that compiler/compiler-worker.js and its WASM assets are published.'));
+    worker.onmessageerror=()=>finish(reject,new Error('The compiler worker returned an unreadable message. Refresh the page and retry.'));
     worker.postMessage({id:'compile',data:{source}});
   });
 }
 function __runWithLocalClang(module, tests, onCase, timeoutMs=20000) {
   return new Promise((resolve,reject)=>{
-    const worker=new Worker('compiler/run-worker.js');
+    const worker=new Worker(new URL('compiler/run-worker.js', document.baseURI));
     let settled=false;
     let completed=0;
     const results=[];
@@ -767,7 +761,8 @@ function __runWithLocalClang(module, tests, onCase, timeoutMs=20000) {
         finish(reject,new Error(data?.message||'The local execution engine failed.'));
       }
     };
-    worker.onerror=event=>finish(reject,new Error(event.message||'The local execution worker failed.'));
+    worker.onerror=event=>finish(reject,new Error(event.message||'The local execution worker failed. Check that compiler/run-worker.js and its WASM assets are published.'));
+    worker.onmessageerror=()=>finish(reject,new Error('The execution worker returned an unreadable message. Refresh the page and retry.'));
     worker.postMessage({id:'run-suite',data:{module,tests:tests.map(t=>({input:t.input||''}))}});
   });
 }
