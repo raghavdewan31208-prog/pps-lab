@@ -21,6 +21,7 @@ self.onmessage = async event => {
   if (message.id !== 'run-suite') return;
   let currentOutput = '';
   let skipCommandEcho = false;
+  const COMMAND_PREFIX = '\x1b[1;93m>\x1b[0m ';
   try {
     const module = message.data?.module;
     const tests = message.data?.tests || [];
@@ -28,7 +29,15 @@ self.onmessage = async event => {
     const api = new API({
       readBuffer,
       compileStreaming,
-      hostWrite:chunk => { if(skipCommandEcho){skipCommandEcho=false;return;} currentOutput += String(chunk ?? ''); },
+      hostWrite:chunk => {
+        const value=String(chunk ?? '');
+        if(skipCommandEcho && value.startsWith(COMMAND_PREFIX)){
+          skipCommandEcho=false;
+          return;
+        }
+        skipCommandEcho=false;
+        currentOutput += value;
+      },
       clang:'../wasm/clang',
       lld:'../wasm/lld',
       memfs:'../wasm/memfs',
