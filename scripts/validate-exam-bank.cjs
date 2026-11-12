@@ -6,15 +6,21 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const file = path.join(process.cwd(), 'exam-bank.js');
-const source = fs.readFileSync(file, 'utf8');
-const marker = 'window.__PPS_EXAM_QUESTION_BANK =';
-const markerAt = source.indexOf(marker);
-if (markerAt < 0) throw new Error('Exam question bank declaration was not found.');
-const arrayStart = source.indexOf('[', markerAt + marker.length);
-const arrayEnd = source.lastIndexOf('];');
-if (arrayStart < 0 || arrayEnd < arrayStart) throw new Error('Exam question bank JSON could not be located.');
-const bank = JSON.parse(source.slice(arrayStart, arrayEnd + 1));
+function extractAssignedArray(source, marker, endMarker) {
+  const markerAt = source.indexOf(marker);
+  if (markerAt < 0) throw new Error('Question bank declaration was not found: ' + marker);
+  const arrayStart = source.indexOf('[', markerAt + marker.length);
+  const arrayEnd = endMarker ? source.indexOf(endMarker, arrayStart) : source.lastIndexOf('];');
+  if (arrayStart < 0 || arrayEnd < arrayStart) throw new Error('Question bank JSON could not be located: ' + marker);
+  const jsonEnd = endMarker ? arrayEnd : arrayEnd + 1;
+  return JSON.parse(source.slice(arrayStart, jsonEnd));
+}
+
+const html = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf8');
+const legacy = extractAssignedArray(html, 'window.__PPS_PRIVATE_BANK=', ';window.__PPS_PUBLIC_BANK=');
+const examSource = fs.readFileSync(path.join(process.cwd(), 'exam-bank.js'), 'utf8');
+const added = extractAssignedArray(examSource, 'window.__PPS_EXAM_QUESTION_BANK =');
+const bank = [...legacy, ...added];
 
 function normalize(value) {
   return String(value ?? '').replace(/\r\n?/g, '\n').trim().split(/\s+/).filter(Boolean).join(' ');
@@ -30,15 +36,17 @@ let checked = 0;
 let passed = 0;
 try {
   for (const q of bank) {
-    if (q.mode !== 'full') continue;
-    if (!q.solution || !Array.isArray(q.tests) || q.tests.length < 4) {
-      fail(q.id + ': expected a solution and at least four test cases.');
+    if (q.mode === 'predict') continue;
+    const minimumCases = q.id.startsWith('EX') ? 4 : 3;
+    const minimumHidden = q.id.startsWith('EX') ? 2 : 1;
+    if (!q.solution || !Array.isArray(q.tests) || q.tests.length < minimumCases) {
+      fail(q.id + ': expected a solution and at least ' + minimumCases + ' test cases.');
       continue;
     }
 
     const sampleInputs = new Set((q.samples || []).map(sample => String(sample.input ?? '')));
     const hiddenCount = q.tests.filter(test => !sampleInputs.has(String(test.input ?? ''))).length;
-    if (hiddenCount < 2) fail(q.id + ': expected at least two hidden test cases.');
+    if (hiddenCount < minimumHidden) fail(q.id + ': expected at least ' + minimumHidden + ' hidden test case(s).');
 
     const sourceFile = path.join(temp, q.id + '.cpp');
     const executable = path.join(temp, q.id);
@@ -76,5 +84,5 @@ try {
   fs.rmSync(temp, { recursive: true, force: true });
 }
 
-console.log('Validated ' + bank.length + ' bank entries; ' + passed + '/' + checked + ' reference-solution tests passed.');
+console.log('Validated ' + bank.length + ' bank entries (' + (bank.length - 12) + ' coding tasks); ' + passed + '/' + checked + ' reference-solution tests passed.');
 if (process.exitCode) process.exit(process.exitCode);
