@@ -425,7 +425,7 @@ function renderWorkspace() {
   const showHint = hintLevel > 0;
   const samples = (q.samples || []).slice(0,2);
   const predict = q.mode === 'predict';
-  return `<div class="page-heading" style="margin-bottom:13px"><div><div class="eyebrow">${modeLabel(q.mode).toUpperCase()} · ${esc(q.topic.toUpperCase())}</div><h1 class="page-title" style="font-size:20px">Practice workspace</h1></div><div class="heading-actions"><button class="btn btn-ghost btn-sm" data-page="bank">← Question bank</button>${state.progress.attemptedIds.includes(q.id)&&!state.solution?`<button class="btn btn-ghost btn-sm" data-action="reveal-solution">Reveal solution</button>`:``}<button class="btn btn-ghost btn-sm" data-action="next-question">Next question →</button></div></div>
+  return `<div class="page-heading" style="margin-bottom:13px"><div><div class="eyebrow">${modeLabel(q.mode).toUpperCase()} · ${esc(q.topic.toUpperCase())}</div><h1 class="page-title" style="font-size:20px">Practice workspace</h1></div><div class="heading-actions"><button class="btn btn-ghost btn-sm" data-page="bank">← Question bank</button><button class="btn btn-ghost btn-sm" data-action="previous-question">← Previous</button>${state.progress.attemptedIds.includes(q.id)&&!state.solution?`<button class="btn btn-ghost btn-sm" data-action="reveal-solution">Reveal solution</button>`:``}<button class="btn btn-ghost btn-sm" data-action="next-question">Next question →</button></div></div>
     <div class="workspace-shell">
       <section class="workspace-left"><div class="workspace-scroll">
         <div class="workspace-topline"><span class="workspace-qid">QUESTION ${esc(q.id)}</span><span class="status-chip ${questionStatus(q.id)==='solved'?'solved':questionStatus(q.id)==='revision'?'revision':''}">${statusLabel(q.id)}</span></div>
@@ -876,6 +876,13 @@ function nextQuestion() {
   const index=list.findIndex(q=>q.id===current?.id);
   startQuestion(list[(index+1)%list.length].id);
 }
+function previousQuestion() {
+  const current=currentQuestion();
+  const list=state.questions.filter(q=>q.mode===state.practiceMode);
+  const index=list.findIndex(q=>q.id===current?.id);
+  if(!list.length)return;
+  startQuestion(list[(index-1+list.length)%list.length].id);
+}
 
 function startExam() {
   const full=randomFrom([...state.questions.filter(q=>q.mode==='full')]);
@@ -949,6 +956,7 @@ document.addEventListener('click', event=>{
   if(!action)return;
   const name=action.dataset.action;
   if(name==='start-question'){startQuestion(action.dataset.id);return;}
+  if(name==='previous-question'){previousQuestion();return;}
   if(name==='random-practice'){startRandomPractice();return;}
   if(name==='random-revision'){startRandomPractice(true);return;}
   if(name==='continue-practice'){const id=state.progress.lastQuestionId || 'A01';startQuestion(id);return;}
