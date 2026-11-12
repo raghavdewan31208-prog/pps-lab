@@ -15,7 +15,7 @@ Open the GitHub Pages URL in a modern browser. No local installation is required
 - Nine dedicated exam sections: 1D arrays, 2D matrices, searching, sorting, pointers, pointer-to-pointer, DMA, functions and recursion
 - Four evaluation cases per new exam question, with samples, hints and hidden-in-app solutions
 - Browser-local progress tracking
-- C++17 compilation via Judge0 CE
+- C++17 compilation via the bundled local Clang/WASI compiler
 
 Note: This is a static personal practice site. Question data and evaluation logic are shipped to the browser and are not suitable for secure or high-stakes assessment.
 
