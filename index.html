@@ -259,6 +259,16 @@ const __newExamBank = __examBank.filter(question => !__existingIds.has(question.
 __privateBank.push(...__newExamBank);
 __publicBank.push(...__newExamBank.map(({tests,solution,explanation,...question}) => question));
 
+// Online-judge style comparison: ignore whitespace layout, but preserve token order and values.
+function __normalise(value) {
+  return String(value ?? '')
+    .replace(/\r\n?/g, '\n')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .join(' ');
+}
+
 async function api(url, payload, onProgress) {
   if (url === '/api/questions') return { questions: __publicBank };
   if (url === '/api/health') {
