@@ -493,8 +493,8 @@ function renderTestOutput(data) {
   const checked = results.filter(item=>item.status !== 'not_run').length;
   const failed = results.filter(item=>!item.passed && item.status !== 'not_run').length;
   const notRun = results.filter(item=>item.status === 'not_run').length;
-  const shownCount = results.filter(item=>item.visible).length;
-  const hiddenCount = Math.max(0, total - shownCount);
+  const shownCount = Number(data.shownTotal ?? results.filter(item=>item.visible).length);
+  const hiddenCount = Number(data.hiddenTotal ?? Math.max(0, total - shownCount));
   const isRunning = data.status === 'running';
   const isCompileError = data.status === 'compile_error';
   const accepted = Boolean(data.accepted);
@@ -748,12 +748,14 @@ function __runWithLocalClang(module, tests, onCase, timeoutMs=20000) {
     let settled=false;
     let completed=0;
     const results=[];
+    const shownTotal=tests.filter(test=>test.visible).length;
+    const hiddenTotal=tests.length-shownTotal;
     const started=performance.now();
     const finish=(fn,value)=>{if(settled)return;settled=true;clearTimeout(timer);worker.terminate();fn(value);};
     const timer=setTimeout(()=>{
       const remaining=tests.length-completed;
       for(let i=0;i<remaining;i++)results.push({index:completed+i+1,passed:false,visible:!!tests[completed+i]?.visible,status:'time_limit'});
-      finish(resolve,{status:'time_limit',passed:results.filter(x=>x.passed).length,total:tests.length,accepted:false,executionTimeMs:Math.round(performance.now()-started),testResults:results});
+      finish(resolve,{status:'time_limit',passed:results.filter(x=>x.passed).length,total:tests.length,shownTotal,hiddenTotal,accepted:false,executionTimeMs:Math.round(performance.now()-started),testResults:results});
     },timeoutMs);
     worker.onmessage=event=>{
       const {id,data}=event.data||{};
@@ -764,11 +766,11 @@ function __runWithLocalClang(module, tests, onCase, timeoutMs=20000) {
         if(test.visible){row.input=test.input;row.expected=test.expected;row.actual=data.stdout||'';row.stderr=data.stderr||'';}
         results[data.index]=row;
         completed++;
-        if(onCase)onCase({status:'running',passed:results.filter(x=>x?.passed).length,total:tests.length,accepted:false,executionTimeMs:Math.round(performance.now()-started),testResults:results.filter(Boolean)});
+        if(onCase)onCase({status:'running',passed:results.filter(x=>x?.passed).length,total:tests.length,shownTotal,hiddenTotal,accepted:false,executionTimeMs:Math.round(performance.now()-started),testResults:results.filter(Boolean)});
       } else if(id==='suite-done'){
         const finalResults=results.filter(Boolean);
         const passed=finalResults.filter(x=>x.passed).length;
-        finish(resolve,{status:passed===tests.length?'accepted':(finalResults.find(x=>x.status==='runtime_error')?'runtime_error':'wrong_answer'),passed,total:tests.length,accepted:passed===tests.length&&finalResults.length===tests.length,executionTimeMs:Math.round(performance.now()-started),testResults:finalResults});
+        finish(resolve,{status:passed===tests.length?'accepted':(finalResults.find(x=>x.status==='runtime_error')?'runtime_error':'wrong_answer'),passed,total:tests.length,shownTotal,hiddenTotal,accepted:passed===tests.length&&finalResults.length===tests.length,executionTimeMs:Math.round(performance.now()-started),testResults:finalResults});
       } else if(id==='fatal'){
         finish(reject,new Error(data?.message||'The local execution engine failed.'));
       }
@@ -780,7 +782,7 @@ function __runWithLocalClang(module, tests, onCase, timeoutMs=20000) {
 }
 async function __runLocalPps(code, tests, onProgress) {
   const module=await __compileWithLocalClang(code,onProgress);
-  if(module?.__compileFailure)return {status:'compile_error',compiled:false,compileOutput:module.message||'Compilation failed.',passed:0,total:tests.length,accepted:false,testResults:tests.map((t,i)=>({index:i+1,passed:false,visible:!!t.visible,status:'not_run'}))};
+  if(module?.__compileFailure)return {status:'compile_error',compiled:false,compileOutput:module.message||'Compilation failed.',passed:0,total:tests.length,shownTotal:tests.filter(t=>t.visible).length,hiddenTotal:tests.filter(t=>!t.visible).length,accepted:false,testResults:tests.map((t,i)=>({index:i+1,passed:false,visible:!!t.visible,status:'not_run'}))};
   return __runWithLocalClang(module,tests,onProgress);
 }
 
