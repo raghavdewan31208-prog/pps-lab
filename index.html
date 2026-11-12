@@ -342,6 +342,8 @@ function renderDashboard() {
     <div class="grid stats-grid">
       <div class="stat-card"><div class="stat-top"><span>Questions in lab</span><span class="stat-icon">▤</span></div><div class="stat-value">${total}</div><div class="stat-note">Full-code writing, logic correction, fill-in-code and output prediction</div></div>
       <div class="stat-card"><div class="stat-top"><span>Questions solved</span><span class="stat-icon">✓</span></div><div class="stat-value">${solved}<small> / ${total}</small></div><div class="stat-note">${total ? Math.round(solved/total*100) : 0}% of the full practice set</div></div>
+      <div class="stat-card"><div class="stat-top"><span>Questions attempted</span><span class="stat-icon">◷</span></div><div class="stat-value">${state.progress.attemptedIds.length}</div><div class="stat-note">Questions with at least one submission</div></div>
+      <div class="stat-card"><div class="stat-top"><span>Questions remaining</span><span class="stat-icon">▱</span></div><div class="stat-value">${Math.max(0,total-solved)}</div><div class="stat-note">Not yet accepted</div></div>
       <div class="stat-card"><div class="stat-top"><span>Submission accuracy</span><span class="stat-icon">◎</span></div><div class="stat-value">${accuracy()}<small>%</small></div><div class="stat-note">${attempts} submissions recorded</div></div>
       <div class="stat-card"><div class="stat-top"><span>Current streak</span><span class="stat-icon">↗</span></div><div class="stat-value">${getDateStreak()}<small> days</small></div><div class="stat-note">Consecutive days with a submission</div></div>
     </div>
@@ -472,7 +474,7 @@ function renderRunOutput(data) {
 function renderTestOutput(data) {
   if (!data) return `<div class="console-empty">Submit your code to run every shown and hidden test case. Results will appear here one by one.</div>`;
   if (data.status === 'service_error') {
-    return `<div class="console-status"><i class="status-dot offline"></i><strong>Compiler service unavailable</strong></div><pre class="console-pre">${esc(data.error || 'The compiler service did not return a result. Your answer was not graded.')}</pre>`;
+    return `<div class="console-status"><i class="status-dot offline"></i><strong>Local compiler unavailable</strong></div><pre class="console-pre">${esc(data.error || 'The compiler service did not return a result. Your answer was not graded.')}</pre>`;
   }
 
   const results = data.testResults || [];
