@@ -24,6 +24,9 @@ jobs:
       - name: Check out PPS Lab
         uses: actions/checkout@v4
 
+      - name: Validate every exam-bank reference solution
+        run: node scripts/validate-exam-bank.cjs
+
       - name: Check out browser C++17 toolchain
         uses: actions/checkout@v4
         with:
